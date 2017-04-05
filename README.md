@@ -64,14 +64,14 @@
 #### 使用css-loader
 像下面这样在webpack.config.js文件中配置
 
-`module.exports = {`
-   ` module: {`
-        `rules: [{`
-            `test: /\.css$/,`
-            `use: 'css-loader'`
-        `}]`
-    `}`
-`}`
+    module.exports = {
+       module: {
+            rules: [{
+                test: /\.css$/,
+                use: 'css-loader'
+            }]
+        }
+    }
 这样配置的结果是css和js打包到一起了。
 
 这有缺点，你将无法利用浏览器的能力异步并行加载CSS，而是要你的页面不得不等到你的整个JavaScript加载完成，才能应用css到dom中。
@@ -80,20 +80,192 @@
 #### 使用ExtractTextWebpackPlugin
 安装`ExtractTextWebpackPlugin`插件
 `npm i --save-dev extract-text-webpack-plugin`
+
 在webpack中使用该插件需要三步
-+`var ExtractTextPlugin = require('extract-text-webpack-plugin');`
-`module.exports = {`
-    `module: {`
-         `rules: [{`
-             `test: /\.css$/,`
--            `use: 'css-loader'`
-+            `use: ExtractTextPlugin.extract({`
-+                `use: 'css-loader'`
-+            `})`
-         `}]`
-     `},`
-+    `plugins: [`
-+        `new ExtractTextPlugin('styles.css'),`
-+    `]`
-`}`
+
+    var ExtractTextPlugin = require('extract-text-webpack-plugin');
+    module.exports = {
+        module: {
+             rules: [{
+                 test: /\.css$/,
+                 use: 'css-loader'
+                 use: ExtractTextPlugin.extract({
+                     use: 'css-loader'
+                 })
+             }]
+         },
+         plugins: [
+             new ExtractTextPlugin('styles.css'),
+         ]
+    }
+
 以上三个步后，会生成一个新的css文件，并将其作为一个单独的html标签，插入到html中。
+
+### 第三方库的代码分割
+
+一个典型的应用程序使用第三方库的框架/功能需求。使用这些库的特定版本，这里的代码不经常更改。然而，应用程序代码经常更改。
+
+捆绑应用程序代码与第三方库代码将是低效的。这是因为浏览器可以缓存基于缓存头的资源文件，如果文件内容不改变，就可以不需要调用CDN就可以缓存文件。为了利用这一点，我们希望保持第三方库文件的哈希不变，无论应用程序代码如何变化。
+
+只有当我们为第三方库和应用程序代码分开时，我们才能做到这一点。
+
+让我们考虑一个使用momentjs示例的应用程序，一个常用的时间格式库。
+
+安装库文件如下
+`npm install --save moment`
+
+在index文件中引入moment库，并console出当前时间
+index.js
+`var moment = require('moment');
+console.log(moment().format());`
+
+我们可以在webpack中做如下配置
+
+    var path = require('path');
+
+    module.exports = function(env) {
+        return {
+            entry: './index.js',
+            output: {
+                filename: '[name].[chunkhash].js',
+                path: path.resolve(__dirname, 'dist')
+            }
+        }
+    }
+在项目中运行webpack，会发现，moment和index.js都打包成了bundle.js，这对于我们的应用是不理想的，如果index.js有改动的话，整个代码块都需要重新build。浏览器也被迫每次都重新加载新的资源，尽管它们它们大部分都没有改变。
+
+#### 多个入口文件
+让我们解决以上问题，通过为moment添加一个额外的入口，名字为vendor
+var path = require('path');
+
+    module.exports = function(env) {
+        return {
+            entry: {
+                main: './index.js',
+                vendor: 'moment'
+            },
+            output: {
+                filename: '[name].[chunkhash].js',
+                path: path.resolve(__dirname, 'dist')
+            }
+        }
+    }
+    
+ 通过运行webpack，我们发现生成了两个文件，如果检查这两个文件，我们会发现，每个文件中都有moment，原因在于，moment是一个依赖的主要应用，每个入口将会捆绑自己的依赖。
+以上原因我们将需要使用CommonsChunkPlugin 插件
+ 
+#### CommonsChunkPlugin 
+这是一个相当复杂的插件。它从根本上允许我们从不同的代码中提取所有公共模块，并将它们添加到公共包中，如果公共包不存在就会创建一个。
+我们使用CommonsChunkPlugin，修改webpack文件
+
+    var webpack = require('webpack');
+    var path = require('path');
+
+    module.exports = function(env) {
+        return {
+            entry: {
+                main: './index.js',
+                vendor: 'moment'
+            },
+            output: {
+                filename: '[name].[chunkhash].js',
+                path: path.resolve(__dirname, 'dist')
+            },
+            plugins: [
+                new webpack.optimize.CommonsChunkPlugin({
+                    name: 'vendor' // Specify the common bundle's name.
+                })
+            ]
+        }
+    }
+ 
+现在在运行webpack，则moment只存在于vendor文件中。
+#### 隐含通用供应商块(或第三方库)
+可以配置一个commonschunkplugin实例只接受供应商库
+ 
+    var webpack = require('webpack');
+    var path = require('path');
+
+    module.exports = function() {
+        return {
+            entry: {
+                main: './index.js'
+            },
+            output: {
+                filename: '[name].[chunkhash].js',
+                path: path.resolve(__dirname, 'dist')
+            },
+            plugins: [
+                new webpack.optimize.CommonsChunkPlugin({
+                    name: 'vendor',
+                    minChunks: function (module) {
+                       // this assumes your vendor imports exist in the node_modules directory
+                       return module.context && module.context.indexOf('node_modules') !== -1;
+                    }
+                })
+            ]
+        };
+    }
+    
+以上配置同样可以生成vendor文件，并且包涵node_modules文件夹中的所有第三方库
+ 
+#### 清单文件
+以上的配置中，如果代码改变了，那么两个文件的hash值都变化了，这种情况不是我们想要的。这意味着我们仍然无法获得浏览器缓存的好处，因为每一个版本的更改，浏览器将不得不重新加载文件。
+
+这里的问题是，在每次构建，生成一些Webapck 运行代码，这有助于WebPACK做工作。当有一个单一的文件时，运行时代码在这个文件中。但是当生成多个文件时，运行时代码会被解压到公共模块中，就是vendor文件。
+
+为了防止这种情况，我们需要提取运行时代码到一个单独的清单文件。尽管我们以创建了另一个文件为代价，但是我们获得了vendor文件长期缓存的权益。
+
+    var webpack = require('webpack');
+    var path = require('path');
+
+    module.exports = function(env) {
+        return {
+            entry: {
+                main: './index.js',
+                vendor: 'moment'
+            },
+            output: {
+                filename: '[name].[chunkhash].js',
+                path: path.resolve(__dirname, 'dist')
+            },
+            plugins: [
+                new webpack.optimize.CommonsChunkPlugin({
+                    names: ['vendor', 'manifest'] // Specify the common bundle's name.
+                })
+            ]
+        }
+    };
+注意是[chunkhash]
+ 
+使用我们迄今所学到的，我们也可以实现相同的结果与隐含的通用供应商块。
+ 
+    var webpack = require('webpack');
+    var path = require('path');
+
+    module.exports = function() {
+        return {
+            entry: {
+                main: './index.js' //Notice that we do not have an explicit vendor entry here
+            },
+            output: {
+                filename: '[name].[chunkhash].js',
+                path: path.resolve(__dirname, 'dist')
+            },
+            plugins: [
+                new webpack.optimize.CommonsChunkPlugin({
+                    name: 'vendor',
+                    minChunks: function (module) {
+                       // this assumes your vendor imports exist in the node_modules directory
+                       return module.context && module.context.indexOf('node_modules') !== -1;
+                    }
+                }),
+                //CommonChunksPlugin will now extract all the common modules from vendor and main bundles
+                new webpack.optimize.CommonsChunkPlugin({ 
+                    name: 'manifest' //But since there are no more common modules between them we end up with just the runtime code included in the manifest file
+                })
+            ]
+        };
+    }
+ 
+ 
