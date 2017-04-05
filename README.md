@@ -1,8 +1,19 @@
+
+
 边学边翻译的，如有不当之处请指出
+
+## 目录
+- [安装](#1)
+- [代码分割](#2)
+- [css的代码分割](#3)
+- [第三方库的代码分割](#4)
+- [使用import() 进行代码分割](#5)
+- [使用require.ensure 分割代码](#6)
 
 ### 开始部分就不多说了
 
-### 安装
+### 安装{#1}
+
 #### 前期准备
 在开始之前确保安装了最新的nodejs。目前的LTS是一个理想的出发点，如果你用旧版本的nodejs可能会遇到各种各样的问题。
 
@@ -28,11 +39,13 @@
 
 ### 升级的问题就不多说了
 
-### 代码分割
+
+### 代码分割{#2}
 代码分割是webpack最令人信服的功能之一。它允许你的代码分割成各种的块，然后按需加载，比如用户去到一个匹配的route，或是用户触发了一个事件，
 这需要较小的代码块，允许你根据优先级控制资源。如果运用得当，你的应用系统的加载时间将会有很大的提升。
 
 #### 缓存和并行负载的资源分割
+
 ##### 包资源分割（外部依赖资源分割）
 
 一个典型的应用程序可以依赖于许多第三方库的框架/功能需求。与应用程序代码不同，这些库中的代码不经常更改。
@@ -49,19 +62,24 @@
 学习如何分割css，使用`ExtractTextWebpackPlugin`插件
 
 #### 按需的代码分割
+
 虽然前一类的资源分割需要用户在配置中预先指定拆分点，也可以在应用程序代码中创建动态拆分点。
 这可以用于更精细的分块编码，例如，按我们的申请航线或按照预测用户行为。这允许用户加载非必需资产的需求
 `Code Splitting - Using import()` – ECMAScript
 `Code Splitting - Using require.ensure` – CommonJS 
 
-### css的代码分割
+### css的代码分割{#3}
+
 使用webpack处理css文件，需要将css文件引入到js文件中，就像引入其他的文件一样，使用`css-loader`，将css作为js模块输出，或是选择`ExtractTextWebpackPlugin`
 将css提取并生成css文件
 
 #### 引入css文件
+
 和js引入其他模块一样引入css文件，如在vendor.js文件中
 `import 'bootstrap/dist/css/bootstrap.css';`
+
 #### 使用css-loader
+
 像下面这样在webpack.config.js文件中配置
 
     module.exports = {
@@ -78,6 +96,7 @@
 `ExtractTextWebpackPlugin`这个插件能够解决这个问题
 
 #### 使用ExtractTextWebpackPlugin
+
 安装`ExtractTextWebpackPlugin`插件
 `npm i --save-dev extract-text-webpack-plugin`
 
@@ -101,7 +120,7 @@
 
 以上三个步后，会生成一个新的css文件，并将其作为一个单独的html标签，插入到html中。
 
-### 第三方库的代码分割
+### 第三方库的代码分割{#4}
 
 一个典型的应用程序使用第三方库的框架/功能需求。使用这些库的特定版本，这里的代码不经常更改。然而，应用程序代码经常更改。
 
@@ -268,7 +287,7 @@ var path = require('path');
         };
     }
  
-### 使用import() 进行代码分割
+### 使用import() 进行代码分割{#5}
  
 #### 动态import
 目前一个功能性的import()模块加载的语法，在ECMAScript中正在讨论。
@@ -409,5 +428,5 @@ webpack.config.js
 
 ## 拓展阅读回头再看
 
-### 使用require.ensure 分割代码
+### 使用require.ensure 分割代码{#6}
 在这节中我们将讨论webpack如何使用require.ensure分割代码
