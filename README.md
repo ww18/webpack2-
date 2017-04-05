@@ -409,3 +409,5 @@ webpack.config.js
 
 ## 拓展阅读回头再看
 
+### 使用require.ensure 分割代码
+在这节中我们将讨论webpack如何使用require.ensure分割代码
