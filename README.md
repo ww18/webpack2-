@@ -7,12 +7,12 @@
 - [代码分割](#代码分割)
 - [css的代码分割](#css的代码分割)
 - [第三方库的代码分割](#第三方库的代码分割)
-- [使用import() 进行代码分割](#使用import() 进行代码分割)
-- [使用require.ensure 分割代码](#使用require.ensure 分割代码)
+- [使用import()进行代码分割](#使用import()进行代码分割)
+- [使用require.ensure分割代码](#使用require.ensure分割代码)
 
 ### 开始部分就不多说了
 
-### 安装{#1}
+### 安装
 
 #### 前期准备
 在开始之前确保安装了最新的nodejs。目前的LTS是一个理想的出发点，如果你用旧版本的nodejs可能会遇到各种各样的问题。
@@ -40,7 +40,7 @@
 ### 升级的问题就不多说了
 
 
-### 代码分割{#2}
+### 代码分割
 代码分割是webpack最令人信服的功能之一。它允许你的代码分割成各种的块，然后按需加载，比如用户去到一个匹配的route，或是用户触发了一个事件，
 这需要较小的代码块，允许你根据优先级控制资源。如果运用得当，你的应用系统的加载时间将会有很大的提升。
 
@@ -68,7 +68,7 @@
 `Code Splitting - Using import()` – ECMAScript
 `Code Splitting - Using require.ensure` – CommonJS 
 
-### css的代码分割{#3}
+### css的代码分割
 
 使用webpack处理css文件，需要将css文件引入到js文件中，就像引入其他的文件一样，使用`css-loader`，将css作为js模块输出，或是选择`ExtractTextWebpackPlugin`
 将css提取并生成css文件
@@ -120,7 +120,7 @@
 
 以上三个步后，会生成一个新的css文件，并将其作为一个单独的html标签，插入到html中。
 
-### 第三方库的代码分割{#4}
+### 第三方库的代码分割
 
 一个典型的应用程序使用第三方库的框架/功能需求。使用这些库的特定版本，这里的代码不经常更改。然而，应用程序代码经常更改。
 
@@ -287,7 +287,7 @@ var path = require('path');
         };
     }
  
-### 使用import() 进行代码分割{#5}
+### 使用import()进行代码分割
  
 #### 动态import
 目前一个功能性的import()模块加载的语法，在ECMAScript中正在讨论。
@@ -428,5 +428,5 @@ webpack.config.js
 
 ## 拓展阅读回头再看
 
-### 使用require.ensure 分割代码{#6}
+### 使用require.ensure分割代码
 在这节中我们将讨论webpack如何使用require.ensure分割代码
