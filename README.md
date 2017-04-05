@@ -7,8 +7,8 @@
 - [代码分割](#代码分割)
 - [css的代码分割](#css的代码分割)
 - [第三方库的代码分割](#第三方库的代码分割)
-- [使用import()进行代码分割](#使用import()进行代码分割)
-- [使用require.ensure分割代码](#使用require.ensure分割代码)
+- [使用import()进行代码分割](#使用import进行代码分割)
+- [使用require.ensure分割代码](#使用requireensure分割代码)
 
 ### 开始部分就不多说了
 
