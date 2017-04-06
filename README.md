@@ -10,6 +10,8 @@
 - [代码分割-使用import()](#代码分割-使用import)
 - [分割代码-使用require.ensure](#分割代码-使用requireensure)
 - [为生产环境打包](#为生产环境打包)
+- [缓存](#缓存)
+- [开发](#开发)
 
 ### 开始部分就不多说了
 
@@ -807,3 +809,95 @@ prod.js (updated)
 
 然而，在你所有的环境中选择什么是共用的取决于你自己。我们刚刚只是演示了一些在我们建立应用时典型的共用部分。
 主要知道webpackMerge的用法
+
+### 缓存
+使用webpack使静态资源长期缓存有以下方法：
+- 为内容相关的每个文件添加[chunkhash]
+- 将minifest提取为单独的文件
+- 确保包涵结构代码的入口文件在有相同依赖的情况下不会改变hash值（？）
+更多的优化设置
+
+- 在html需要资源时使用编译器统计文件名字
+- 在加载资源之前生成manifest JSON文件，并将其内联到html页中。
+
+#### 问题
+我们代码改变后会生成新的文件，但是如果文件名不变的话，浏览器可能会取缓存中的文件，而会产生问题，但是如果每次都生成新的文件的话那缓存又没有用了。
+
+#### 解决：每个文件生成唯一的哈希值
+如果文件的内容没有改变，我们怎么才能产生相同的文件名呢？例如，当没有更新依赖项时，只需要重新打包应用程序代码，而不必重新打包依赖文件。
+解决方法是我们使用[chunkhash]替换[hash]值。(但是我们在项目中一般是添加文件的后缀，而不是每次都生成新的文件。)
+
+    module.exports = {
+      /*...*/
+      output: {
+        /*...*/
+    -   filename: "[name].[hash].js"
+    +   filename: "[name].[chunkhash].js"
+      }
+    };
+    
+此配置也将创建2个文件，但在这种情况下，每个文件将得到自己独特的哈希。
+
+注意在开发环境中不要使用[chunkhash]，因为会增加编译时间。分开开发和生产环境的配置能够使用不同的名字，开发环境是[name].js ，生产环境是 [name].[chunkhash].js。这里有个问题，这样的话每次生产环境就会有一个新的文件，如果发布了很多次就会有很多个文件，不做处理吗？
+
+#### 确定的hash值
+
+为了压缩生成的文件，webpack使用标实符替换模块的名字。通过编译，标实符被生成并映射到生成的文件名字中，然后放到一个名字为manifest的js对象中。为了保存生成中的标实符，webpack提供了`NamedModulesPlugin`插件为开发环境，`HashedModuleIdsPlugin`插件为生产环境。
+
+这节是上面 代码分割-第三方库 的详细介绍或者说是升级版
+按以上配置还是有相同的问题，就是无论修改了文件的哪部分，所有的文件都重新打包一次，名字改变，缓存失效。为了解决这个问题，我们需要使用`ChunkManifestWebpackPlugin`这个插件，这将提取清单到一个单独的JSON文件。这个通过一个变量替换了manifest。但是我们能够做到更好，我们可以通过`CommonsChunkPlugin`提取运行时文件到一个单独的入口。下面是一个更新的webpack.config.js，将我们建立目录清单和运行时产生的文件.
+
+    // webpack.config.js
+    var ChunkManifestPlugin = require("chunk-manifest-webpack-plugin");
+
+    module.exports = {
+      /*...*/
+      plugins: [
+        /*...*/
+        new webpack.optimize.CommonsChunkPlugin({
+          name: ["vendor", "manifest"], // vendor libs + extracted manifest
+          minChunks: Infinity,
+        }),
+        /*...*/
+        new ChunkManifestPlugin({
+          filename: "chunk-manifest.json",
+          manifestVariable: "webpackManifest"
+        })
+      ]
+    };
+（自己的： 这一段中最后一个生成json文件的试了一下去掉后没有影响啊，还有html文件中头部放js代码不知道干什么用的，还有上面的这些还不能完全做到hash值不变，需要再加上两个插件，
+
+    var path = require("path");
+    var webpack = require("webpack");
+    var ChunkManifestPlugin = require("chunk-manifest-webpack-plugin");
+    var WebpackChunkHash = require("webpack-chunk-hash");
+
+    module.exports = {
+      entry: {
+        vendor: "./src/vendor.js", // vendor reference file(s)
+        main: "./src/index.js" // application code
+      },
+      output: {
+        path: path.join(__dirname, "build"),
+        filename: "[name].[chunkhash].js",
+        chunkFilename: "[name].[chunkhash].js"
+      },
+      plugins: [
+        new webpack.optimize.CommonsChunkPlugin({
+          name: ["vendor", "manifest"], // vendor libs + extracted manifest
+          minChunks: Infinity,
+        }),
+        new webpack.HashedModuleIdsPlugin(),
+        new WebpackChunkHash(),
+        new ChunkManifestPlugin({
+          filename: "chunk-manifest.json",
+          manifestVariable: "webpackManifest"
+        })
+      ]
+    };
+这样就完美了，这样修改代码只会改变代码部分的hash值，而不会改变公共部分的值。
+
+#### 内连Manifest代码
+将manifest文件和webpack的运行时文件内连到html中，用来减少http请求。这个功能依赖服务器的配置。但是如果你的项目不依赖于服务器渲染，那我们就能生成一个简单的index.html文件
+
+### 开发
