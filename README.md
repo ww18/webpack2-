@@ -9,6 +9,7 @@
 - [代码分割-第三方库](#代码分割-第三方库)
 - [代码分割-使用import()](#代码分割-使用import)
 - [分割代码-使用require.ensure](#分割代码-使用requireensure)
+- [为生产环境打包](#为生产环境打包)
 
 ### 开始部分就不多说了
 
@@ -429,4 +430,380 @@ webpack.config.js
 ## 拓展阅读回头再看
 
 ### 分割代码-使用require.ensure
-在这节中我们将讨论webpack如何使用require.ensure分割代码
+
+在这节中我们将讨论webpack如何使用require.ensure分割代码。
+
+webpack在构建require.ensure代码的时候是静态解析的。在回调函数中依赖的或require进来的模块，都会被加入到一个新的块，这个新的块会被写入到一个新的文件中，并通过webpack的jsonp按需加载。语法如下：
+
+    require.ensure(dependencies: String[], callback: function(require), chunkName: String)
+  
+#### dependencies    
+    
+这是一个字符串数组，是在回调函数中的所有代码都可以执行之前需要声明并获得的模块。
+
+#### callback
+当依赖加载完成之后运行的回调函数。require函数最为参数传递到回调函数中，在函数体内部可以通过require获取更多的模块。
+
+#### chunkName
+这个参数是为这个require.ensure创建的chunk名字。通过传递相同的名字给不同的require.ensure，我们能够将它们的代码合并到一个文件中。从而使浏览器加载一个包即可。
+
+#### 例子
+让我们看一下下面的文件目录
+
+    .
+    ├── dist
+    ├── js
+    │   ├── a.js
+    │   ├── b.js
+    │   ├── c.js
+    │   └── entry.js
+    └── webpack.config.js
+    
+entry.js
+
+    require('./a');
+    require.ensure(['./b'], function(require){
+        require('./c');
+        console.log('done!');
+    });
+    
+a.js
+
+    console.log('***** I AM a *****');
+
+b.js
+
+    console.log('***** I AM b *****');
+
+c.js
+
+    console.log('***** I AM c *****');
+    
+webpack.config.js
+
+    var path = require('path');
+    var htmlWebpackPlugin = require('html-webpack-plugin');
+
+    module.exports = function(env) {
+        return {
+            entry: './js/entry.js',
+            output: {
+                filename: 'bundle.js',
+                path: path.resolve(__dirname, 'dist'),
+                //publicPath: 'https://cdn.example.com/assets/',
+                // tell webpack where to load the on-demand bundles. 
+
+                //pathinfo: true,
+                // show comments in bundles, just to beautify the output of this example.
+                // should not be used for production.
+            },
+            //添加index文件生成代码，能更清楚的明白
+            plugins:[
+                new htmlWebpackPlugin({
+                    fileName: 'index.html',
+                    template: 'index.html'
+                })
+            ]
+        }
+    }
+注意：在使用代码分割中，output.publicPath是一个很重要的参数，它告诉webpack从哪里按需加载打包生成的文件。
+在这个项目中运行webpack，我们发现生成了两个js文件，bundle.js和0.bundle.js。entry.js和a.js打包成了一个文件bundle.js ，bundle.js
+
+    /******/ (function(modules) { // webpackBootstrap
+    //webpack bootstrap code...
+
+    /******/     // __webpack_public_path__
+    /******/     __webpack_require__.p = "https://cdn.example.com/assets/";
+
+    // webpack bootstrap code...
+    /******/ })
+    /******/ ([
+    /* 0 */
+    /* unknown exports provided */
+    /* all exports used */
+    /*!*****************!*\
+      !*** ./js/a.js ***!
+      \*****************/
+    /***/ (function(module, exports) {
+
+    console.log('***** I AM a *****');
+
+
+    /***/ }),
+    /* 1 */,
+    /* 2 */,
+    /* 3 */
+    /* unknown exports provided */
+    /* all exports used */
+    /*!*********************!*\
+      !*** ./js/entry.js ***!
+      \*********************/
+    /***/ (function(module, exports, __webpack_require__) {
+
+    __webpack_require__(/*! ./a */ 0);
+    __webpack_require__.e/* require.ensure */(0).then((function(require){
+        __webpack_require__(/*! ./c */ 2);
+        console.log('done!');
+    }).bind(null, __webpack_require__)).catch(__webpack_require__.oe);
+
+
+    /***/ })
+    /******/ ]);
+    
+该代码中我们看到 __webpack_require__.p ，对应的是上面的output.publicPath这个配置
+
+b.js 和 c.js 打包成了 0.bundle.js
+
+    webpackJsonp([0],[
+    /* 0 */,
+    /* 1 */
+    /* unknown exports provided */
+    /* all exports used */
+    /*!*****************!*\
+      !*** ./js/b.js ***!
+      \*****************/
+    /***/ (function(module, exports) {
+
+    console.log('***** I AM b *****');
+
+
+    /***/ }),
+    /* 2 */
+    /* unknown exports provided */
+    /* all exports used */
+    /*!*****************!*\
+      !*** ./js/c.js ***!
+      \*****************/
+    /***/ (function(module, exports) {
+
+    console.log('***** I AM c *****');
+    /***/ })
+    ]);
+我们看到html文件中只注入了bundle.js文件。当我们打开浏览器的时候，webpack将按需加载0.bundle.js文件。
+我们自己写的时候可以先不用publicPath。
+reuqire.ensure的注意事项：
+1.以上代码运行后只在console中打印出了a，c，b并没有打印出来，要想打印出b还需要在代码中require一下b。
+2.第一个参数可以为空。
+
+### 为生产环境打包
+
+这一章将讲解如何使用webpack为生产环境打包
+
+#### 自动打包方式
+
+运行`webpack -p`（或等价的 `webpack --optimize-minimize --define process.env.NODE_ENV="'production'"`）。执行下列步骤：
+
+- 使用UglifyJsPlugin压缩文件
+- 运行LoaderOptionsPlugin插件
+- 设置node环境变量
+
+##### 压缩
+webpack配备了`UglifyJsPlugin`这个插件，为了压缩输出。这个插件支持所有的UglifyJs的配置。指定`--optimize-minimize`在terminal中，相当于在webpack.config.js中设置了如下配置：
+
+    // webpack.config.js
+    const webpack = require('webpack');
+
+    module.exports = {
+      /*...*/
+      plugins:[
+        new webpack.optimize.UglifyJsPlugin({
+          sourceMap: options.devtool && (options.devtool.indexOf("sourcemap") >= 0 || options.devtool.indexOf("source-map") >= 0)
+        })
+      ]
+    };
+    
+##### source Maps
+我们鼓励您在生产中启用源映射。它们对于调试和运行基准测试非常有用。webpack可以在代码块和分割文件中源映射。
+
+在你的配置，使用devtool对象设置源地图类型。我们目前支持七种类型的源地图。您可以在我们的配置文档页中找到更多关于它们的信息。
+其中一个很好的选择是使用`cheap-module-source-map`，简化了源映射到每行的单一映射.
+
+##### node的环境变量
+运行` webpack -p` (or `--define process.env.NODE_ENV="'production'"`)相当于以下面的方式调用 DefinePlugin :
+
+    // webpack.config.js
+    const webpack = require('webpack');
+
+    module.exports = {
+      /*...*/
+      plugins:[
+        new webpack.DefinePlugin({
+          'process.env.NODE_ENV': JSON.stringify('production')
+        })
+      ]
+    };
+    
+这部分对于配置开发环境和生产环境很有用，可以参考API。
+
+#### 手动配置webpack的不同环境
+当我们在不同的环境中有多种配置时，最简单的方法就是为每个环境编写单独的JS文件。例如:
+dev.js
+
+    module.exports = function (env) {
+      return {
+        devtool: 'cheap-module-source-map',
+        output: {
+            path: path.join(__dirname, '/../dist/assets'),
+            filename: '[name].bundle.js',
+            publicPath: publicPath,
+            sourceMapFilename: '[name].map'
+        },
+        devServer: {
+            port: 7777,
+            host: 'localhost',
+            historyApiFallback: true,
+            noInfo: false,
+            stats: 'minimal',
+            publicPath: publicPath
+        }
+      }
+    }
+    
+prod.js
+
+    module.exports = function (env) {
+      return {
+        output: {
+            path: path.join(__dirname, '/../dist/assets'),
+            filename: '[name].bundle.js',
+            publicPath: publicPath,
+            sourceMapFilename: '[name].map'
+        },
+        plugins: [
+            new webpack.LoaderOptionsPlugin({
+                minimize: true,
+                debug: false
+            }),
+            new webpack.optimize.UglifyJsPlugin({
+                beautify: false,
+                mangle: {
+                    screw_ie8: true,
+                    keep_fnames: true
+                },
+                compress: {
+                    screw_ie8: true
+                },
+                comments: false
+            })
+        ]
+      }
+    }
+    
+webpack.config.js
+
+    function buildConfig(env) {
+      return require('./config/' + env + '.js')(env)
+    }
+
+    module.exports = buildConfig;
+    
+从我们的package.json，我们建立我们的应用程序使用webpack，命令是这样的：
+
+    "build:dev": "webpack --env=dev --progress --profile --colors",
+    "build:dist": "webpack --env=prod --progress --profile --colors",
+    
+你可以看到，我们传递环境变量到webpack.config.js文件中。从那里我们使用了一个简单的开关，通过简单的判断加载正确的JS文件环境。  
+以上的配置文件写的不完整，没有entry选项，所以我们自己做例子的时候直接看下面的就行。
+
+一种先进的方法是有一个基本的配置文件，存放所有常用的功能，又有环境的具体文件和简单的使用“合并”，合并webpack配置。这能够帮助我们避免重复代码。
+例如，你可以有你所有的基础配置，如解决您的JS，TS，PNG，JPEG，JSON等。在一个共同的基础文件如下：
+base.js
+
+    module.exports = function() {
+        return {
+            entry: {
+                'polyfills': './src/polyfills.ts',
+                'vendor': './src/vendor.ts',
+                'main': './src/main.ts'
+
+            },
+            output: {
+                path: path.join(__dirname, '/../dist/assets'),
+                filename: '[name].bundle.js',
+                publicPath: publicPath,
+                sourceMapFilename: '[name].map'
+            },
+            resolve: {
+                extensions: ['.ts', '.js', '.json'],
+                modules: [path.join(__dirname, 'src'), 'node_modules']
+
+            },
+            module: {
+                rules: [{
+                    test: /\.ts$/,
+                    use: [
+                        'awesome-typescript-loader',
+                        'angular2-template-loader'
+                    ],
+                    exclude: [/\.(spec|e2e)\.ts$/]
+                }, {
+                    test: /\.css$/,
+                    use: ['to-string-loader', 'css-loader']
+            }, {
+                test: /\.(jpg|png|gif)$/,
+                use: 'file-loader'
+            }, {
+                test: /\.(woff|woff2|eot|ttf|svg)$/,
+                use: {
+                  loader: 'url-loader',
+                  options: {
+                    limit: 100000
+                  }
+                }
+            }],
+        },
+        plugins: [
+            new ForkCheckerPlugin(),
+
+            new webpack.optimize.CommonsChunkPlugin({
+                name: ['polyfills', 'vendor'].reverse()
+            }),
+            new HtmlWebpackPlugin({
+                template: 'src/index.html',
+                chunksSortMode: 'dependency'
+            })
+        ],
+    };
+    }
+    
+然后将此基础配置与特定环境下的配置文件使用“webpackMerge”。让我们看一个例子，我们合并我们的产品文件，上面所提到的，这个基础配置文件使用“webpackMerge”：
+
+prod.js (updated)
+
+    const webpackMerge = require('webpack-merge');
+
+    const commonConfig = require('./base.js');
+
+    module.exports = function(env) {
+        return webpackMerge(commonConfig(), {
+            plugins: [
+            new webpack.LoaderOptionsPlugin({
+                minimize: true,
+                debug: false
+            }),
+            new webpack.DefinePlugin({
+                'process.env': {
+                    'NODE_ENV': JSON.stringify('production')
+                }
+            }),
+            new webpack.optimize.UglifyJsPlugin({
+                beautify: false,
+                mangle: {
+                    screw_ie8: true,
+                    keep_fnames: true
+                },
+                compress: {
+                    screw_ie8: true
+                },
+                comments: false
+            })
+        ]
+    })
+    }
+我们注意到在prod.js文件中有三个主要的更新，
+- 'webpack-merge' 和'base.js'.
+- 我们将output属性移到了base.js文件中，只是强调一点，我们的output属性是公用的属性，所以我们重构了prod.js文件，然后将属性移到了base.js文件中。
+- 我们使用`DefinePlugin`定义了生产环境的 process.env.NODE_ENV环境变量。当我们在生产环境下打包时，process.env.NODE_ENV的值是 production。同样，我们可以管理我们选择的各种变量，具体的环境。
+
+然而，在你所有的环境中选择什么是共用的取决于你自己。我们刚刚只是演示了一些在我们建立应用时典型的共用部分。
+主要知道webpackMerge的用法
