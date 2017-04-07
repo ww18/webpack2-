@@ -901,3 +901,45 @@ prod.js (updated)
 将manifest文件和webpack的运行时文件内连到html中，用来减少http请求。这个功能依赖服务器的配置。但是如果你的项目不依赖于服务器渲染，那我们就能生成一个简单的index.html文件
 
 ### 开发
+在这一页中，我们将解释如何开始开发和如何选择三个工具之一开发。这是假设你已经有了一个WebPACK的配置文件。在产品阶段不会使用这些工具。
+
+#### 调整编译器
+
+一些文本编辑器具有“安全写入”功能，默认情况下启用此功能。作为一个结果，保存的文件将不总是在编译结果。
+每一个编译器有不同的方式去禁用它，最公用的方式是：
+
+    Sublime Text 3 - Add "atomic_save": false to your user preferences.
+    IntelliJ - use search in the preferences to find "safe write" and disable it.
+    Vim - add :set backupcopy=yes in your settings.
+    WebStorm - uncheck Use "safe write" in Preferences > Appearance & Behavior > System Settings
+    
+#### 文件地图
+当js抛出了一个错误，我们很想知道是那个文件的哪一行代码导致了这个错误。如果webpack将所有文件都打包生成新的文件后，我们就很不方便去追踪错误。文件地图就尝试去解决这个错误。这里有很多不同的配置，每个都有优点也有缺点，开始的时候我们使用下面这个：
+
+    devtool: "cheap-eval-source-map"
+    
+#### 选择一个工具
+webpack能够使用watch模式，在这种模式下，webpack监听所有的文件，当文件变化时重新编译。 webpack-dev-server提供了一个简单的方式，使用开发服务器快速重新编译。如果你已经有了开发服务器，但是想足够灵活的话， webpack-dev-middleware 这个可以作为中间件。
+webpack-dev-server 和 webpack-dev-middleware编译后保存到内存中，意味着不会保存到硬盘中，这样能够使编译更快，也不会产生更多的文件。
+在大多数情况下，你会想用webpack-dev-server，因为它是最容易上手，并提供多功能开箱。
+
+#### webpack 的监听模式
+webpack的监听模式监听文件的变化。如果检测到任何更改，它将再次运行编译。在编译的时候如果想要看到进度条的话：
+
+    webpack --progress --watch
+观看模式没有假设一个服务器，所以你需要提供自己的。一个简单的服务器是`serve`，安装`npm i --save-dev serve`之后，在目录下运行``npm bin`/serve``。还有更简单的方式，在package.json文件中设置scripts
+
+    ...
+    "scripts": {
+      "start": "serve"
+    }
+    ...
+你可以通过运行`npm start` 在你的项目中的目录中启动服务器。每次编译后，您将需要手动刷新浏览器以查看更改。
+
+注意：`--single`这个命令对于单页面应用很有用
+
+#### chrome工作区的监听模式
+如果设置了chrome为监听模式，那么不必刷新浏览器，需要设置webpack的配置来适应。`devtool: "inline-source-map"`。
+这有一些陷阱关于使用工作区监听模式：
+- 大块（如常见的块，超过1MB），重建可能导致页面空白，这将迫使你刷新浏览器。
+- 小的块要比大的块编译的更块，因为 `inline-source-map` 会用base64的编码处理源码，所以会慢。（？）
