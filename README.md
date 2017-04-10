@@ -12,7 +12,7 @@
 - [为生产环境打包](#为生产环境打包)
 - [缓存](#缓存)
 - [开发](#开发)
-- [Development - Vagrant](#Development - Vagrant)
+- [Development-Vagrant](#Development-Vagrant)
 
 ### 开始部分就不多说了
 
@@ -986,7 +986,7 @@ webpack-dev-middleware工作连接基于中间件堆栈。这会很有用，如�
 执行`node middle.ware.js`，然后在浏览器中打开http://localhost:3000/ ，我们会看到页面，并且它也会自动刷新
 还有更多的配置，参看devServer documentation.
 
-### Development - Vagrant
+### Development-Vagrant
 如果你有一个更先进的项目和使用Vagrant在虚拟机中运行你的开发环境中，你也会想在虚拟机中运行webpack
 
 #### 配置项目
@@ -1049,5 +1049,3 @@ webpack-dev-server包涵一个脚本在生成的文件中，这个脚本连接�
 
 #### 结论
 我们将Vagrant box设置一个可访问的IP地址，然后使webpack-dev-server可以公开访问，然后就可以通过浏览器访问了。这样我们就解决了一个经常遇到的问题，这个问题是VirtualBox不能发出文件系统事件，导致服务器在文件更改后无法重新加载。
-    };一个
-    };
