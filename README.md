@@ -13,6 +13,7 @@
 - [缓存](#缓存)
 - [开发](#开发)
 - [Development-Vagrant](#development-vagrant)
+- [依赖的管理](#依赖的管理)
 
 ### 开始部分就不多说了
 
@@ -1049,3 +1050,55 @@ webpack-dev-server包涵一个脚本在生成的文件中，这个脚本连接�
 
 #### 结论
 我们将Vagrant box设置一个可访问的IP地址，然后使webpack-dev-server可以公开访问，然后就可以通过浏览器访问了。这样我们就解决了一个经常遇到的问题，这个问题是VirtualBox不能发出文件系统事件，导致服务器在文件更改后无法重新加载。
+
+### 依赖的管理
+es6 modules， commonjs， amd。
+
+#### require中包涵表达式
+如果你的require中包涵表达式，那就需要上下文环境了。所以在编译的时候才会知道确切的模块，例如：
+
+    require("./template/" + name + ".ejs");
+webpack解析require()，并提取了一些信息
+
+    Directory: ./template
+    Regular expression: /^.*\.ejs$/
+##### 上下文模块
+生成上下文模块。它包含对该目录中的所有模块的引用，这些请求与正则表达式匹配的请求是必需的。上下文模块包含将请求转换为模块ID的映射。例如：
+
+    {
+        "./table.ejs": 42,
+        "./table-row.ejs": 43,
+        "./directory/folder.ejs": 44
+    }
+上下文模块还包含一些运行时逻辑来访问地图。这意味着动态需求被支持，但会导致所有可能的模块包含在包中。
+
+我们可以使用require.context()函数创建自己的上下文，它允许我们传递一个目录参数，一个布尔值，确定是否查找子目录，还有一个参数是正则表达式，用来匹配文件。webpack在打包过程中解析require.context()，语法如下：
+
+    require.context(directory, useSubdirectories = false, regExp = /^\.\//)
+比如：
+
+    require.context("./test", false, /\.test\.js$/);
+    // a context with files from the test directory that can be required with a request endings with `.test.js`.
+
+    require.context("../", true, /\.stories\.js$/);
+    // a context with all files in the parent folder and descending folders ending with `.stories.js`.
+
+#### 上下文模块的API
+上下文模块暴露了一个（require）函数，这个函数有一个参数：request。
+这个暴露的函数有三个属性：resolve, keys, id
+- resolve是一个函数，返回了解析请求的module id值
+- keys是一个函数，返回一个数组，数组是上下文能够处理的所有可能的请求。如果您想要目录中的所有文件或匹配模式，这可能是有用的。
+例如：
+
+    function importAll (r) {
+      r.keys().forEach(r);
+    }
+    importAll(require.context('../components/', true, /\.js$/));
+    
+    var cache = {};
+    function importAll (r) {
+      r.keys().forEach(key => cache[key] = r(key));
+    }
+    importAll(require.context('../components/', true, /\.js$/));
+    // At build-time cache will be populated with all required modules.
+id是上下文模块的id，这对于module.hot.accept是很有用的。
