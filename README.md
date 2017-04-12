@@ -1102,3 +1102,6 @@ webpack解析require()，并提取了一些信息
     importAll(require.context('../components/', true, /\.js$/));
     // At build-time cache will be populated with all required modules.
 id是上下文模块的id，这对于module.hot.accept是很有用的。
+
+### 垫补法
+webpack作为一个模块打包工具，能够解析ES2015，CommonJS 或 AMD的语法形式。但是很多时候，当我们使用第三方库的时候，我们发现它们是作为全局变量使用的，如jquery的$符号，它们可能也需要暴露全局的变量。这部分我们将看到不同的方法去帮助webpack理解这些零散的模块。
