@@ -14,6 +14,10 @@
 - [开发](#开发)
 - [Development-Vagrant](#development-vagrant)
 - [依赖的管理](#依赖的管理)
+- [垫补法](#垫补法)
+- [自定义库](#自定义库)
+- [改进打包的性能](#改进打包的性能)
+- [处理兼容性](#处理兼容性)
 
 ### 开始部分就不多说了
 
@@ -1105,3 +1109,239 @@ id是上下文模块的id，这对于module.hot.accept是很有用的。
 
 ### 垫补法
 webpack作为一个模块打包工具，能够解析ES2015，CommonJS 或 AMD的语法形式。但是很多时候，当我们使用第三方库的时候，我们发现它们是作为全局变量使用的，如jquery的$符号，它们可能也需要暴露全局的变量。这部分我们将看到不同的方法去帮助webpack理解这些零散的模块。
+
+#### 在dist文件的版本中，使用未被压缩的CommonJS/AMD文件
+在package.json中我们能看到大多数的模块版本，这对于大多数开发人员是非常有用的，对webpack来说使用别名来获取src的版本信息是最好的，因为通过这种方式，webpack能够将依赖优化的更好。当然在大多数情况下dist也能工作的很好。
+
+    // webpack.config.js
+
+    module.exports = {
+        ...
+        resolve: {
+            alias: {
+                jquery: "jquery/src/jquery"
+            }
+        }
+    };
+
+#### ProvidePlugin
+这个ProvidePlugin插件，使得模块在webpack中像变量一样在其他模块中使用。只有当使用这个变量的时候，模块才会被引用。最旧的模块依赖于特定的全局变量的存在，就像jquery插件，使用$或jQuery。在这个场景下，我们可以预定义变量`var $ = require(“jquery”)`，每次会触发全局的$。
+
+    module.exports = {
+      plugins: [
+        new webpack.ProvidePlugin({
+          $: 'jquery',
+          jQuery: 'jquery'
+        })
+      ]
+    };
+此插件还能够提供一个模块的唯一出口通过以下格式配置它与数组路径 `[module, child, ...children?]`。下面的配置将从TypeScript's tslib 包中正确的引入函数`__assign`，并在调用的时候提供引用。
+
+    module.exports = {
+      plugins: [
+        new webpack.ProvidePlugin({
+          __assign: ['tslib', '__assign'],
+          __extends: ['tslib', '__extends'],
+        })
+      ]
+    };
+    
+#### imports-loader
+`imports-loader` 插入必要的全局变量所需的遗留模块，例如，有些模块依赖this，但是this是window对象。当模块执行的上下文的this是`module.exports`的时候就会有问题。在这种情况下我们能够使用`imports-loader`覆盖this
+
+    module.exports = {
+      module: {
+        rules: [{
+          test: require.resolve("some-module"),
+          use: 'imports-loader?this=>window'
+        }]
+      }
+    };
+    
+这里提供了很多种不同的模块风格，比如AMD, CommonJS and legacy。然而，大多数时候他们首先检查定义，然后使用一些古怪的代码来导出属性。在这种情况下，通过设置define = false，能够阻止CommonJS的路径。
+
+    module.exports = {
+      module: {
+        rules: [{
+          test: require.resolve("some-module"),
+          use: 'imports-loader?define=>false'
+        }]
+      }
+    };
+    
+#### exports-loader
+假设一个库创建一个全局变量，它希望它的用户使用它，在这种情况下，我们可以使用exports-loader，去暴露出CommonJS格式的全局变量，例如，去导出file作为file，和helpers.parse作为parse
+
+    module.exports = {
+      module: {
+        rules: [{
+          test: require.resolve("some-module"),
+          use: 'exports-loader?file,parse=helpers.parse'
+          // adds below code the file's source:
+          //  exports["file"] = file;
+          //  exports["parse"] = helpers.parse;
+        }]
+      }
+    };
+    
+#### script-loader
+这个插件评估全局上下文中的代码，就像我们需要将代码放到script标签中一样，在这种模式下，每一个正常的库应该能正常工作。require, module等这些是未定义的。
+注意： 文件将作为字符串插入到模块中，webpack不会压缩它，所以我们要使用压缩版本，此加载程序添加的库也没有开发工具支持。
+例如： 有一个js文件：
+
+legacy.js `GLOBAL_CONFIG = {};`
+
+使用script-loader  `require('script-loader!legacy.js');`
+
+执行的代码是 `eval("GLOBAL_CONFIG = {};");`
+
+#### noParse选项
+当有没有AMD/CommonJS模块版本，而我们需要包涵dist文件，你可以标记该模块作为noparse。然后webpack将只包括模块而没有解析它，这样可以提高打包时间。
+
+    module.exports = {
+      module: {
+        noParse: /jquery|backbone/
+      }
+    };
+使用这个属性的话，其他的配置，如ProvidePlugin 将会失效。
+
+### 自定义库
+
+webpack是一个用来打包应用程序代码和库代码的工具。如果你是JavaScript库的作者，并希望简化你的打包策略，那么这个文档将帮助你。
+
+#### 定义一个库
+让我们假设，你正在写一个小的库，名字叫webpack-numbers，它的功能是允许将数字1到数字5转换为文本表示，反之亦然。实现使用的es2015模块，并可能看起来像这样。
+
+    //src/index.js
+    import _ from 'lodash';
+    import numRef from './ref.json';
+
+    export function numToWord(num) {
+        return _.reduce(numRef, (accum, ref) => {
+            return ref.num === num ? ref.word : accum;
+        }, '');
+    };
+
+    export function wordToNum(word) {
+        return _.reduce(numRef, (accum, ref) => {
+            return ref.word === word && word.toLowerCase() ? ref.num : accum;
+        }, -1);
+    };
+库的使用方式如下：
+
+    import * as webpackNumbers from 'webpack-numbers';
+
+    ...
+    webpackNumbers.wordToNum('Two') // output is 2
+    ...
+
+    // CommonJS modules
+
+    var webpackNumbers = require('webpack-numbers');
+
+    ...
+    webpackNumbers.numToWord(3); // output is Three
+    ...
+    
+    // Or as a script tag
+
+    <html>
+    ...
+    <script src="https://unpkg.com/webpack-numbers"></script>
+    <script>
+        ...
+        /* webpackNumbers is available as a global variable */
+        webpackNumbers.wordToNum('Five') //output is 5
+        ...
+    </script>
+    </html>
+#### 配置webpack
+现在讨论的是打包这个库
+- 不打包lodash，由使用者加载
+- 将库命名为webpack-numbers，变量名是webpackNumbers
+- 库能够被加载以下面的方式 import webpackNumbers from 'webpack-numbers' 或是  require('webpack-numbers')
+- 当通过script引入库后，能够通过全局变量webpackNumbers访问库
+- 在nodejs里能够访问库
+##### 添加webpack代码
+基本的配置
+
+    var path = require('path');
+
+    module.exports = {
+        entry: './src/index.js',
+        output: {
+            path: path.resolve(__dirname, 'dist'),
+            filename: 'webpack-numbers.js'
+        }
+    };
+##### 添加externals配置项
+执行上面代码，我们会发现，打包后的代码很大，我们检查代码会发现，lodash代码被打包到了最终的文件中。像我们这样的，对于打包lodash库是不必须的，因此，我们希望放弃对该库的外部库的控制权。使用externals配置项能够完成这项工作。
+
+    module.exports = {
+        ...
+        externals: {
+            "lodash": {
+                commonjs: "lodash",
+                commonjs2: "lodash",
+                amd: "lodash",
+                root: "_"
+            }
+        }
+        ...
+    };
+
+这意味着我们的库有一个外部的依赖。
+对于库的广泛使用，我们希望它能在不同的环境中兼容，比如： CommonJS, AMD, Node.js 或是作为一个全局的变量。为了使库能够复用，我们在webpack中添加library属性：
+
+    module.exports = {
+        ...
+        output: {
+            ...
+            library: 'webpackNumbers'
+        }
+        ...
+    };
+这使我们的库在导入时可用为全局变量，为了使库兼容其他的生产环境，我们添加libraryTarget这个属性。
+
+    module.exports = {
+        ...
+        output: {
+            ...
+            library: 'webpackNumbers',
+            libraryTarget: 'amd' // Possible value - amd, commonjs, commonjs2, commonjs-module, this, var
+        }
+        ...
+    };
+如果只设置了library，而没有设置libraryTarget，那么默认值是var
+
+##### 最后一步
+将最后生成的文件作为main的文件，配置到package.json中
+
+    //package.json
+    {
+        "main": "dist/webpack-numbers.js",
+        "module": "src/index.js", // To add as standard module as per https://github.com/dherman/defense-of-dot-js/blob/master/proposal.md#typical-usage
+    }
+
+main字段是遵循package.json的标准，module是一个建议允许JavaScript生态系统升级使用es2015模块而不破坏向后的兼容性。
+现在我们能发布这个插件作为一个npm的包了，并且发布完成后能在 unpkg.com中找到它。
+
+### 改进打包的性能
+- 增量打包
+- profile
+- 分析工具
+-  dirty chunks ([chunkhash])
+- source maps
+- PrefetchPlugin
+- resolving
+- DllPlugin
+
+### 处理兼容性
+- require.main
+- require.cache
+- module.loaded
+- global
+- process
+- __dirname
+- __filename
+- module.id
